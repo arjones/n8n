@@ -9,10 +9,17 @@ export class Sapling implements ICredentialType {
   documentationUrl = 'sapling';
   properties = [
       {
-          displayName: 'API Key',
-          name: 'apiKey',
+          displayName: 'Sapling Subdomain',
+          name: 'subdomain',
           type: 'string' as NodePropertyTypes,
           default: '',
+          description: 'The sub-domain provided for your Sapling account',
       },
+      {
+        displayName: 'API Key',
+        name: 'apiKey',
+        type: 'string' as NodePropertyTypes,
+        default: '',
+    },
   ];
 }

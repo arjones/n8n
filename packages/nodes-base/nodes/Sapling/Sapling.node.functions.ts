@@ -5,13 +5,19 @@ import {
 
 import {
 	IDataObject,
-	INodeExecutionData,
+	INodeParameters
 } from 'n8n-workflow';
 
 import { OptionsWithUri } from 'request';
+import { Person, SaplingError, SaplingUsers } from './Sapling.types';
 
-export function getItemCopy(items: INodeExecutionData[], properties: string[]): IDataObject[] {
-	return []
+/**
+ * Check if value returned by API is an error
+ * @param response response obtained from Sapling API
+ */
+function isResponseError(response: SaplingUsers | SaplingError): response is SaplingError {
+	const err = (response as SaplingError)
+	return (err.message !== undefined && err.status >= 300)
 }
 
 /**
@@ -23,16 +29,10 @@ export function getItemCopy(items: INodeExecutionData[], properties: string[]): 
  * @param {object} body
  * @returns {Promise<any>}
  */
-export async function saplingRequest(this: IHookFunctions | IExecuteFunctions, method: string, endpoint: string, body?: IDataObject, query?: IDataObject): Promise<any> { // tslint:disable-line:no-any
+export async function saplingCollectionRequest(this: IHookFunctions | IExecuteFunctions, transformer: (element: SaplingUsers) => Person[], method: string, endpoint: string, body?: IDataObject, query: INodeParameters = {}): Promise<any[]> {
 	const credentials = this.getCredentials('sapling');
-	const subdomain = this.getNodeParameter('subdomain', 0)
-
 	if (credentials === undefined) {
 		throw new Error('No credentials got returned!');
-	}
-
-	if (query === undefined) {
-		query = {};
 	}
 
 	let options: OptionsWithUri = {
@@ -41,32 +41,33 @@ export async function saplingRequest(this: IHookFunctions | IExecuteFunctions, m
 			'Authorization': `Token ${credentials.apiKey}`,
 		},
 		method: method,
-		uri: `https://${subdomain}.saplingapp.io/api/v1/beta/${endpoint}`,
+		uri: `https://${credentials.subdomain}.saplingapp.io/api/v1/beta/${endpoint}`,
 		json: true,
 		body: body,
 		qs: query,
 	};
 
 	try {
-		let response;
-		let current_page = 1;
-		const responseBuffer = new Array();
+		const responseBuffer: Person[] = [];
+		let current_page = 0;
+		let total_pages = 1;
 		do {
-			console.log('================ options ================ \n', options)
+			// Setup paging on top other filters
+			const qs = Object.assign(query, { page: current_page + 1 })
+			options = Object.assign(options, { qs: qs })
 
-			response = await this.helpers.request(options);
-			console.log('\n\n================ response ================ \n', response)
-
-			responseBuffer.push(...response.users)
-			current_page = response['current_page']
-
-			console.log('current_page', current_page)
-			console.log('total_pages', response['total_pages'])
+			const response: SaplingUsers | SaplingError = await this.helpers.request(options);
+			if (isResponseError(response)) {
+				// Return a clear error
+				console.error(response);
+				throw new Error(response.message + ` HTTP Status: ${response.status}`);
+			}
+			responseBuffer.push(... (transformer(response)))
 
 			// move cursor forward
-			options = Object.assign(options, { qs: { page: current_page + 1 } })
-
-		} while (current_page < response['total_pages']);
+			current_page = response.current_page
+			total_pages = response.total_pages
+		} while (current_page < total_pages);
 
 		return responseBuffer
 
