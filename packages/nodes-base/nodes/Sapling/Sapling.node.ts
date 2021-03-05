@@ -10,8 +10,8 @@ import {
   INodeTypeDescription,
 } from 'n8n-workflow';
 
-import { saplingCollectionRequest } from './Sapling.node.functions';
-import { Person, SaplingUsers } from './Sapling.types';
+import { saplingCollectionRequest, saplingSingleRequest } from './Sapling.node.functions';
+import { Person, SaplingUser, SaplingUsers } from './Sapling.types';
 export class Sapling implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Sapling',
@@ -173,7 +173,7 @@ export class Sapling implements INodeType {
   };
 
   async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-    let responseData:Person[] = [];
+    let responseData: Person[] = [];
     const returnData = [];
 
     const resource = this.getNodeParameter('resource', 0) as string;
@@ -186,17 +186,15 @@ export class Sapling implements INodeType {
       if (resource === 'user') {
         if (operation === 'list') {
           const filters = this.getNodeParameter('additionalFilters', i) as INodeParameters
-
           const transformer = ((response: SaplingUsers) => response.users as Person[])
-
-          const response:Person[] = await saplingCollectionRequest.call(this, transformer, 'GET', 'profiles', undefined, filters) as Person[]
+          const response: Person[] = await saplingCollectionRequest.call(this, transformer, 'GET', 'profiles', undefined, filters) as Person[]
           responseData = response;
 
         } else if (operation === 'get') {
-          // const guid = this.getNodeParameter('guid', i) as string
-          // console.log('guid', guid)
-          // const response = await saplingCollectionRequest.call(this, 'GET', `profiles/${guid}`)
-          // responseData = response;
+          const guid = this.getNodeParameter('guid', i) as string
+          const transformer = ((response: SaplingUser) => response.user)
+          const response = await saplingSingleRequest.call(this, transformer, 'GET', `profiles/${guid}`)
+          responseData.push(response);
 
         } else
           new Error(`${resource} > ${operation}: not implemented`);
